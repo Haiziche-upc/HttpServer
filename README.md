@@ -51,7 +51,7 @@ File structure:
 |--404.html
 |--404
 |  |--style.css
-|  |--favicon.ico
+|  |--failed.ico
 |--Demo1.html
 |--HaiZiChe.png
 ```
