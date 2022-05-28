@@ -19,6 +19,7 @@
 #include <fstream>
 #include <pthread.h>
 
+
 #define  SERVER_PORT 9999
 #define BUF_LEN  512
 #define LISTEN_NUM 20
@@ -26,10 +27,11 @@ using namespace std;
 void Server();
 void *doHttpRequest(void *pClientSock);
 void GETRequest(int clientSock, char *url);
-void POSTRequest(int clientSock, char *url);
+void POSTRequest(int clientSock, char *url);//400 500
 void SendImage(char *url, int clientSock);
-void NotFound(int clientSock,char  *url);//404
-void NotImplemented(int clientSock);//501
+void NotFound(int clientSock);//404
+void NotImplemented(int clientSock,char *method,char *url);//501
 int getLine(int sock, char *buf, int size);
+void GetTime();
 
 #endif //HTTPSERVER_H
