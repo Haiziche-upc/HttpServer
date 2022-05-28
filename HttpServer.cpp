@@ -71,29 +71,29 @@ void *doHttpRequest(void *pClientSock) {
     else if (strncasecmp(method, "POST", i) == 0)
         POSTRequest(clientSock, url);
     else
-        NotImplemented(clientSock);
+        NotImplemented(clientSock, method, url);
 
     if (pClientSock)
         free(pClientSock);
     close(clientSock);
     return NULL;
 }
+
 /**
  * function: deal get request
  * param: int sock; char *url
  * return:void
- * Implementation steps:1.read all request head and print
- *                      2.parse out real url remove ? after the data
- *                      3.check that the data exist
- *                      4.set request header and send
- *                          judge request type
- *                      5.response body info
- *
+ * Implementation steps:1. read all request head and print
+ *                      2. parse out real url;remove ? after the data
+ *                      3. check that the data exist;if not exist return
+ *                      4. set response header
+ *                      5. send response header
+ *                      6. send info body
  * */
 void GETRequest(int clientSock, char *url) {
-
     // 1.read all request head and print
-    printf("\n-------------------GET--request--Start---------------------\n");
+    printf("\n--------------------GET Start--------------------\n");
+    GetTime();
     fprintf(stdout, "Method:GET\nURL:%s\n", url);
     int len = 0;
     char buff[BUF_LEN];
@@ -104,9 +104,8 @@ void GETRequest(int clientSock, char *url) {
             close(clientSock);
             return;
         }
-        printf( "%s\n", buff);
+        //printf( "%s\n", buff);
     } while (len > 0);
-    printf("-------------------GET--request--End---------------------\n\n");
 
     // 2.parse out real url;remove ? after the data
     char *pos = strchr(url, '?');//get real url
@@ -116,12 +115,11 @@ void GETRequest(int clientSock, char *url) {
     // 3.check that the data exist;if not exist return
     struct stat stUrl;
     if (stat(url, &stUrl) == -1) {
-        NotFound(clientSock,url);
+        NotFound(clientSock);
         return;
     }
 
-    // 4. set request header
-    //printf("\n-------------------GET Response Start------------------------------------\n");
+    // 4. set response header
     char head_buff[] = "HTTP/1.1 200 OK\r\n"
                        "Server:HaiZiChe Server\r\n"
                        "Connection: close\r\n";
@@ -175,13 +173,26 @@ void GETRequest(int clientSock, char *url) {
             }
         }
         fclose(resource);
+        printf("Response  Success\n");
     }
-    //printf("\n-------------------GET Response End------------------------------------\n");
-    printf("GET Response Success");
+    GetTime();
+    printf("--------------------GET End--------------------\n");
 }
+
+/**
+ * function:deal post
+ * param:int clientSock, char *url
+ * return :void
+ * Implementation Step:1. get request header and data
+ *                     2.call search
+ *                     3.set response header
+ *                     4.send response
+ * */
 void POSTRequest(int clientSock, char *url) {
-    printf("\n-------------------------POST Request Start-------------------------------\n");
-    printf("Method:POST\nURL:%s",url);
+    // 1. get request header and data
+    printf("\n--------------------POST Start--------------------\n");
+    GetTime();
+    printf("Method:POST\nURL:%s\n", url);
     int len = 0;
     char buff[BUF_LEN];
     do {
@@ -190,18 +201,19 @@ void POSTRequest(int clientSock, char *url) {
             fprintf(stderr, "Read Post Header Error. reason:%s\n", strerror(errno));
             return;
         }
-        printf("%s\n", buff);
+        //printf("%s\n", buff);
     } while (len > 0);
     char data[512];
     len = read(clientSock, data, sizeof(data));
     printf("Data:%s\n", data);
-    printf("\n-------------------------POST Request End-------------------------------\n");
+
+    // 2.call search
 
     /*
-     * If your POST method needs to check the request parameters
-     * The following code may be useful to you
-     * If not,you can remove some code
-     * */
+    * If your POST method needs to check the request parameters
+    * The following code may be useful to you
+    * If not,you can remove some code
+    * */
 
     //set statues ,default is 1;
     // 1:response 200 OK; 0:response 400 Bad Request
@@ -212,62 +224,90 @@ void POSTRequest(int clientSock, char *url) {
     //You can write functions like this: char* Process(char *data,int *statues)
     //Note this, 195-line var data is a parameter received by POST
     //If request parameters are incorrect, you can set statues to 0
-    char *result =  "";
+    string result = "";
 
-    //set response header
-    char header_200[1024]="HTTP/1.1 200 OK\r\n";
-    char *header_400="HTTP/1.1 400 Bad Request\r\n";
-    char *head_buff =
-            "text/plain\r\n"
+    // 3.set response header
+    char header_200[8192] = "HTTP/1.1 200 OK\r\n";//1
+    char header_400[1024] = "HTTP/1.1 400 Bad Request\r\n";//0
+    char header_500[1024] = "HTTP/1.1 500  Internal Server Error\r\n";//-1
+    char head_buff[] =
+            "Content-Type:text/plain;charset=utf-8\r\n"
             "Server:HaiZiChe Server\r\n"
             "Connection: close\r\n";
-    //if request parameters correct
-    if(status){
-        strcat(header_200,head_buff);
-        snprintf(header_200,1024, "Content-Length: %ld\r\n\r\n", strlen(result));
-        //send response header
-        write(clientSock, header_200, sizeof(header_200));
-        //send response body
-        write(clientSock, result, sizeof(result));
-    }
-    else{//If parameters incorrect you can response 400
-        strcat(header_400,head_buff);
-        strcat(header_400,"Content-Length: 0\r\n\r\n");
-        if(write(clientSock, header_400, sizeof(header_400))<0);
-        fprintf(stderr,"Send 400 failed.  Reason:%s", strerror(errno));
+    char temp[8192];
+    //4.send response
+    // if request parameters correct
+    if (status == 1) {//200
+        strcat(header_200, head_buff);
+        snprintf(temp, 4096, "Content-Length: %ld\r\n\r\n", result.length());
+        strcat(header_200, temp);
+        strcat(header_200, result.c_str());
+        if (write(clientSock, header_200, sizeof(header_200)) < 0)
+            fprintf(stderr, "Send response failed.  Reason:%s\n", strerror(errno));
+        else
+            printf("Response Success.\n");
+
+    } else if (status == 0) {//If parameters incorrect you can response 400
+        strcat(header_400, head_buff);
+        strcat(header_400, "Content-Length: 15\r\n\r\n400 Bad Request");
+        if (write(clientSock, header_400, sizeof(header_400)) < 0)
+            fprintf(stderr, "Send 400 failed.  Reason:%s\n", strerror(errno));
+        else
+            printf("Response 400.\n");
+    } else {
+        strcat(header_500, head_buff);
+        strcat(header_500, "Content-Length: 26\r\n\r\n500  Internal Server Error");
+        if (write(clientSock, header_500, sizeof(header_500)) < 0)
+            fprintf(stderr, "Send 500 failed.  Reason:%s\n", strerror(errno));
+        else
+            printf("Response 500.\n");
 
     }
     close(clientSock);
-
-
-
-
-
+    GetTime();
+    printf("--------------------POST End--------------------\n");
 }
+
+//print time now
+void GetTime() {
+    time_t timep;
+    time(&timep);
+    char tmp[256];
+    strftime(tmp, sizeof(tmp), "%Y-%m-%d %H:%M:%S", localtime(&timep));
+    printf("%s\n", tmp);
+}
+
 /**
  * function:The request method is neither get nor post return 501 and close
  * param:int sock
  * return:void
  * */
-void NotImplemented(int clientSock) {//501
-    fprintf(stderr, "Method Not Implemented\n");
+void NotImplemented(int clientSock, char *method, char *url) {//501
+    printf("\n--------------------%s Start--------------------\n", method);
+    GetTime();
+    printf("URL:%s\n", url);
     int len = 0;
     char buf[BUF_LEN];
     do {
         if (getLine(clientSock, buf, sizeof(buf)) < 0)
             break;
     } while (len > 0);
+
     char head_buff[] = "HTTP/1.1 501 Not Implemented\r\n"
-                       "Server:Haiziche Server\r\n"
+                       "Server:HaiZiChe Server\r\n"
                        "Content-Type: text/html;charset=UTF-8\r\n"
                        "Connection: close\r\n"
-                       "Content-Length:0\r\n\r\n";
-    if(write(clientSock, head_buff, strlen(head_buff))<=0)
-        fprintf(stderr,"Send head failed. reason:%s\n",strerror(errno));
+                       "Content-Length:19\r\n\r\n501 Not Implemented";
+    if (write(clientSock, head_buff, strlen(head_buff)) <= 0)
+        fprintf(stderr, "Send head failed. reason:%s\n", strerror(errno));
+    else
+        printf("Response Success\n");
     close(clientSock);
+    printf("--------------------%s Start--------------------\n", method);
 }
-void NotFound(int clientSock,char  *url) {
-    printf("\n404 Not Found.  URL:%s\n",url);
+
+void NotFound(int clientSock) {
+    printf("404 Not Found\n");
     struct stat st;
     char head_buf[] = "HTTP/1.1 404 Not Found\r\n"
                       "Server:HaiZiChe Server\r\n"
@@ -297,7 +337,6 @@ void NotFound(int clientSock,char  *url) {
     }
     fclose(resource);
     close(clientSock);
-
 }
 
 /**
@@ -316,6 +355,7 @@ void SendImage(char *url, int clientSock) {
     int ret = write(clientSock, buffer, length);
     if (ret < 0)
         fprintf(stderr, "send body error reason:%s", strerror(errno));
+    printf("Response Success\n");
 }
 
 
